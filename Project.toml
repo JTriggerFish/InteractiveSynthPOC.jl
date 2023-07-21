@@ -1,0 +1,4 @@
+name = "InteractiveSynthPOC"
+uuid = "e13ecf16-04e1-444f-9ebb-f972291b62bc"
+authors = ["JTriggerFish"]
+version = "0.1.0"
