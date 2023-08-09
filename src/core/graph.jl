@@ -18,44 +18,13 @@ const AudioSystem = _AudioSystem(false, 0)
 
 process!(x::Number)::Number = x
 
-struct Phasor <: Block
-    freq::Union{Sample,Block}
-    phase::PreciseSample
-    sample_freq::Sample
-end
-
-function process!(p::Phasor)::Sample
-    f = process!(p.freq)
-    c = 2 * π * f / p.sample_freq
-    ret::Sample = p.phase
-    @set p.phase = mod2pi(p.phase + c)
-    ret
-end
-
-
-struct SineOsc <: Block
-    phase::Phasor
-    amplitude::Union{Sample,Block}
-    SineOsc(freq::Union{Number,Block}, amplitude::Union{Number,Block},
-        sample_freq::Union{number,Nothing}=nothing) = new(
-        Phasor(freq, 0, sample_freq ? sample_freq : AudioSystem.sample_freq),
-        amplitude
-    )
-end
-
-function process!(o::SineOsc)::Sample
-    p = process!(o.phase)
-    a = process!(o.amplitude)
-    a * sin(p)
-end
-
-struct MonoToSteroMix <: Block
+struct MonoToStereoMix <: Block
     input::Block
     amplitude_dB::Union{Sample,Block}
     panning::Union{Sample,Block}
 end
 
-function process!(b::MonoToSteroMix)::StereoSample
+function process!(b::MonoToStereoMix)::StereoSample
     x = process!(b.input)
     a = process!(b.amplitude_dB)
     x *= 10^(a / 20)
@@ -69,19 +38,20 @@ function stereo_brickwall_limiter(lr::StereoSample)::StereoSample
     return clamp.(lr, -1.0, 1.0)
 end
 
-struct StereroOutput <: Block
+struct StereoOutput <: Block
     blocks::Vector{Block}
     limiter::Function
-    StereroOutput(blocks::Vector{Block},
-        limiter::Union{Function,Nothing}=nothing) = new(blocks, limiter ? limiter : stereo_brickwall_limiter)
+    StereoOutput(blocks::Union{Vector{Block},Nothing}=nothing,
+        limiter::Union{Function,Nothing}=nothing) = new(blocks isa Vector{Block} ? blocks :  [],
+         limiter isa Function ?  limiter : stereo_brickwall_limiter)
 end
 
-function process!(s::StereroOutput)::StereoSample
+function process!(s::StereoOutput)::StereoSample
     output = SA_F32[0, 0]
     for b in s.blocks
         output += process!(b)
     end
-    return p.limiter(output)
+    return s.limiter(output)
 end
 
 struct Product <: Block
@@ -95,7 +65,7 @@ function process!(p::Product)::Union{Sample,StereoSample}
     return ai * bi
 end
 
-function >>(b::Block, o::StereroOutput)::Nothing
+function >>(b::Block, o::StereoOutput)::Nothing
     push!(o.blocks, b)
     return nothing
 end

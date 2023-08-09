@@ -8,62 +8,33 @@ using Random
 using Base.Threads
 using Setfield
 
-# Structure for sine wave with frequency, phase, volume and panning
-struct SineWave
-    frequency::Float64
-    volume::Float64
-    panning::Float64 # range -1 (left) to 1 (right)
-    phase::Float64
-    SineWave(frequency::Union{Float64, Int}, volume::Float64,
-     panning::Float64 = 0.0, phase::Float64=0.0) = new(Float(frequency), volume, panning, phase)
-end
+include("core/graph.jl")
+include("core/oscillators.jl")
 
-# Create an array to hold the sine waves
-sines::Vector{SineWave} = SineWave[]
-
-# Create a lock to protect the sines array
-sines_lock::ReentrantLock = ReentrantLock()
+graph::StereoOutput = StereoOutput()
+graph_lock::ReentrantLock = ReentrantLock()
 
 function add_sine(frequency::Union{Float64, Int}; volume_db::Float64 = -30.0, panning::Float64 = 0.0)::Nothing
-    volume = 10^(volume_db/20)
-    lock(sines_lock) do
-        #@info "user thread lock aquired"
-        sw = SineWave(frequency, volume, panning)
-        push!(sines, sw)
-        #println(sines)
+    lock(graph_lock) do
+        s = SineOsc(frequency, volume_db)
+        m = MonoToStereoMix(s, panning)
+        m >> graph
+
         return nothing
     end
     #@info "user thread lock freed"
 end
 
-function delete_sine(index::Int)::Nothing
-    lock(sines_lock) do
-        if index > length(sines) || index < 1
-            println("Invalid index.")
-        else
-            deleteat!(sines, index)
-        end
-    end
-    return nothing
-end
-
-function clear()::Nothing
-    lock(sines_lock) do
-        empty!(sines)
-    end
-    return nothing
-end
-
 function add_naive_sawtooth(frequency::Union{Float64, Int}; volume_db::Float64 = -30.0, panning::Float64 = 0.0)::Nothing
     # A VERY naive bandlimited sawtooth, this is very inefficient and for testing only
     volume = 10^(volume_db/20)
-    lock(sines_lock) do
+    lock(graph_lock) do
         #@info "user thread lock aquired"
         n = 1
         while frequency * n < 48000 / 2  # nyquist frequency, hardcoded for simplicity
             harmonic_volume = volume / n
-            sw = SineWave(frequency*n, harmonic_volume, panning)
-            push!(sines, sw)
+            freq = frequency * n
+            add_sine(freq; volume_db=harmonic_volume, panning=panning)
             n += 1
         end
     end
@@ -71,34 +42,12 @@ function add_naive_sawtooth(frequency::Union{Float64, Int}; volume_db::Float64 =
     #@info "user thread lock freed"
 end
 
-function update_sine(index::Int;
-     frequency::Union{Float64, Int, Nothing}=nothing,
-     volume::Union{Float64, Nothing}=nothing,
-     panning::Union{Float64, Nothing}=nothing)::Nothing
-
-    lock(sines_lock) do
-        if index > length(sines) || index < 1
-            println("Invalid index.")
-        else
-            wave = sines[index]
-            frequency = isnothing(frequency) ? wave.frequency : frequency
-            volume = isnothing(volume) ? wave.volume : volume
-            panning = isnothing(panning) ? wave.panning : panning
-            
-            sines[index] = @set wave.frequency = frequency  
-            sines[index] = @set wave.volume = volume
-            sines[index] = @set wave.panning = panning
-        end
-    end
-    @info "total number of sines: " length(sines)
-    return nothing
-end
 
 function supersaw(center_frequency::Union{Float64, Int};
                            variance_hz::Float64 = 1.0, 
                            num_saws::Int = 2, 
                            volume_db::Float64 = -30.0)::Nothing
-    lock(sines_lock) do
+    lock(graph_lock) do
         saw_volume = volume_db - 20*log10(sqrt(num_saws))# adjust volume per sawtooth wave for equal loudness
         for _ in 1:num_saws
             # random frequency within variance
@@ -108,7 +57,7 @@ function supersaw(center_frequency::Union{Float64, Int};
             add_naive_sawtooth(frequency; volume_db=saw_volume, panning=saw_panning)
         end
     end
-    @info "total number of sines: " length(sines)
+    @info "total number of nodes: " length(graph.blocks)
     return nothing
 end
 
@@ -116,23 +65,9 @@ function push_audio(audio_device::Cint, buffer_size::UInt32,
      sample_rate::Cint, output_buffer::Vector{Float32})::Nothing
     #@info "Starting audio loop"
     for i in 1:buffer_size
-        sample_left::Float32 = Float32(0)
-        sample_right::Float32 = Float32(0)
-
         # Calculate the output for each sine wave
-        for j in eachindex(sines)
-            wave = sines[j]
-            c = 2 * π * wave.frequency / sample_rate
-            phase = wave.phase
-            output::Float32 = wave.volume * sin(phase)
-
-            # Add the output to the left and right channels, taking panning into account
-            sample_left  += sqrt((1 - wave.panning) / 2) * output
-            sample_right += sqrt((1 + wave.panning) / 2) * output
-
-            # Update the phase for the next cycle
-            sines[j] = @set wave.phase=mod2pi(phase + c)
-        end
+        output::StereoSample = process!(graph)
+        sample_left, sample_right = output
 
         output_buffer[2*i-1] = sample_left
         output_buffer[2*i] = sample_right
@@ -157,7 +92,7 @@ function audio_thread(audio_device::Cint, sample_rate::Cint, audio_spec::SDL_Aud
                 sleep(buffer_size / sample_rate / 2)
             end
             #@info "Done waiting"
-            lock(sines_lock) do
+            lock(graph_lock) do
                 #@info "audio thread lock aquired"
                 push_audio(audio_device, buffer_size, sample_rate, output_buffer)
                 #@info "Audio pushed"
