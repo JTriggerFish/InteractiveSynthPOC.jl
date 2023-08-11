@@ -13,7 +13,7 @@ include("core/graph.jl")
 graph::StereoOutput = StereoOutput()
 graph_lock::ReentrantLock = ReentrantLock()
 
-function add_sine(frequency::Union{Float64, Int}; volume_db::Float64 = -30.0, panning::Float64 = 0.0)::Nothing
+function add_sine(frequency::Number; volume_db::Number = -30.0, panning::Number = 0.0)::Nothing
     lock(graph_lock) do
         s = SineOsc(frequency)
         m = MonoToStereoMix(s, volume_db, panning)
@@ -22,7 +22,7 @@ function add_sine(frequency::Union{Float64, Int}; volume_db::Float64 = -30.0, pa
     return nothing
 end
 
-function add_naive_sawtooth(frequency::Union{Float64, Int}; volume_db::Float64 = -30.0, panning::Float64 = 0.0)::Nothing
+function add_naive_sawtooth(frequency::Number; volume_db::Number = -30.0, panning::Number = 0.0)::Nothing
     # A VERY naive bandlimited sawtooth, this is very inefficient and for testing only
     volume = 10^(volume_db/20)
     lock(graph_lock) do
@@ -40,10 +40,10 @@ function add_naive_sawtooth(frequency::Union{Float64, Int}; volume_db::Float64 =
 end
 
 
-function supersaw(center_frequency::Union{Float64, Int};
-                           variance_hz::Float64 = 1.0, 
+function supersaw(center_frequency::Number;
+                           variance_hz::Number = 1.0, 
                            num_saws::Int = 2, 
-                           volume_db::Float64 = -30.0)::Nothing
+                           volume_db::Number = -30.0)::Nothing
     lock(graph_lock) do
         saw_volume = volume_db - 20*log10(sqrt(num_saws))# adjust volume per sawtooth wave for equal loudness
         for _ in 1:num_saws
@@ -61,7 +61,7 @@ end
 function push_audio(audio_device::Cint, buffer_size::UInt32, output_buffer::Vector{Float32})::Nothing
     for i in 1:buffer_size
         # Calculate the output for each sine wave
-        output::StereoSample = process!(graph)
+        output::SampleVec2 = process!(graph)
         sample_left, sample_right = output
 
         output_buffer[2*i-1] = sample_left

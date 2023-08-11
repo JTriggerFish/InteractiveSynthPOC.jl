@@ -1,8 +1,8 @@
 
-mutable struct Phasor <: Block
-    freq::Union{Sample,Block}
+mutable struct Phasor <: Block{1}
+    freq::Union{Sample,Block{1}}
     phase::Sample
-    sample_freq::Sample
+    const sample_freq::Sample
 end
 
 function process!(p::Phasor)::Sample
@@ -14,10 +14,10 @@ function process!(p::Phasor)::Sample
 end
 
 
-struct SineOsc <: Block
+mutable struct SineOsc <: Block{1}
     phase::Phasor
-    amplitude::Union{Sample,Block}
-    SineOsc(freq::Union{Number,Block}, amplitude::Union{Number,Block} = 1.0,
+    amplitude::Union{Sample,Block{1}}
+    SineOsc(freq::Union{Number,Block{1}}, amplitude::Union{Number,Block{1}} = 1.0,
         sample_freq::Union{Number,Nothing}=nothing) = new(
         Phasor(freq isa Number ? Sample(freq) : freq, 0.0,
          sample_freq isa Number ? Sample(sample_freq) : AudioSystem.sample_freq),
