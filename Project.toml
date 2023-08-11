@@ -6,6 +6,7 @@ version = "0.1.0"
 [deps]
 JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+PProf = "e4faabce-9ead-11e9-39d9-4379958e3056"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Setfield = "efcf1570-3423-57d1-acb7-fd33fddbac46"
 SimpleDirectMediaLayer = "98e33af6-2ee5-5afd-9e75-cbc738b767c4"
