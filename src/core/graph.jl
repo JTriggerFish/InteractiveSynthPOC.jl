@@ -4,12 +4,7 @@ import Base.>>
 import Base.*
 
 const Sample::DataType = Float32
-abstract type AbstractBlock{N, T} end
-
-get_block_type(::Val{1}) = Sample
-get_block_type(N) = SVector{N, Float32}
-
-abstract type Block{N} <: AbstractBlock{N, get_block_type(N)} end
+abstract type Block{N} end
 
 
 const SampleVec2::DataType = SVector{2, Float32}
@@ -40,9 +35,10 @@ function process!(m::MonoToStereoMix{I, A, P})::SampleVec2 where {I<:Block{1}, A
     x::Sample = process!(m.input)
     a::Sample = process!(m.amplitude_dB)
     x *= 10^(a / 20)
-    left::Sample = sqrt((1 - m.panning) / 2) * x
-    right::Sample = sqrt((1 + m.panning) / 2) * x
-    return [left, right]
+    ret = MVector{2, Sample}(undef)
+    ret[1] = sqrt((1 - m.panning) / 2) * x
+    ret[2] = sqrt((1 + m.panning) / 2) * x
+    return ret
 end
 
 
@@ -52,7 +48,7 @@ mutable struct StereoOutput <: Block{2}
 end
 
 function process!(s::StereoOutput)::SampleVec2
-    output::MVector{2,Sample} = zeros(2)
+    output = MVector{2,Sample}(0,0)
     for b in s.blocks
         output += process!(b)
     end
