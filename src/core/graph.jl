@@ -7,9 +7,9 @@ const Sample::DataType = Float32
 abstract type Block{N} end
 
 
-const SampleVec2::DataType = SVector{2, Float32}
-const SampleVec4::DataType = SVector{4, Float32}
-const SampleVec8::DataType = SVector{8, Float32}
+const SampleVec2::DataType = SVector{2, Sample}
+const SampleVec4::DataType = SVector{4, Sample}
+const SampleVec8::DataType = SVector{8, Sample}
 const SampleOrVec = Union{Sample, SampleVec2, SampleVec4, SampleVec8}
 
 struct _AudioSystem
@@ -31,30 +31,31 @@ end
 MonoToStereoMix(input::Block{1}, amplitude_dB::Number=-30.0, 
 panning::Number=0.0) = MonoToStereoMix{Block{1}, Sample, Sample}(input, Sample(amplitude_dB), Sample(panning))
 
-function process!(m::MonoToStereoMix{I, A, P})::SampleVec2 where {I<:Block{1}, A,P}
-    x::Sample = process!(m.input)
-    a::Sample = process!(m.amplitude_dB)
+function process!(m::MonoToStereoMix{I, A, P})::SampleVec2 where {I, A, P}
+    x = process!(m.input)
+    a = process!(m.amplitude_dB)
     x *= 10^(a / 20)
-    ret = MVector{2, Sample}(undef)
-    ret[1] = sqrt((1 - m.panning) / 2) * x
-    ret[2] = sqrt((1 + m.panning) / 2) * x
-    return ret
+    left = sqrt((1 - m.panning) / 2) * x
+    right = sqrt((1 + m.panning) / 2) * x
+    return SampleVec2(left, right)
 end
 
 
 mutable struct StereoOutput <: Block{2}
     blocks::Vector{Block{2}}
-    StereoOutput(blocks::Union{Vector{Block{2}},Nothing}=nothing) = new(blocks isa Vector{Block{2}} ? blocks :  [])
+    output::MVector{2,Sample}
+    StereoOutput(blocks::Union{Vector{Block{2}},Nothing}=nothing) = new(
+        blocks isa Vector{Block{2}} ? blocks :  [],
+        MVector{2, Sample}(undef))
 end
 
 function process!(s::StereoOutput)::SampleVec2
-    output = MVector{2,Sample}(0,0)
+    s.output .= 0.0
     for b in s.blocks
-        output += process!(b)
+        s.output .= s.output .+ process!(b)
     end
-    output[1] = clamp(output[1], -1.0, 1.0)
-    output[2] = clamp(output[2], -1.0, 1.0)
-    return output
+    s.output .= clamp.(s.output, -1.0, 1.0)
+    return s.output
 end
 
 mutable struct Product{A, B} <: Block{1}
