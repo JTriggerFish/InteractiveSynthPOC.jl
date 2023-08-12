@@ -28,17 +28,15 @@ include("oscillators.jl")
 
 process!(x::Sample)::Sample = x
 
-mutable struct MonoToStereoMix <: Block{2}
-    input::Block{1}
-    amplitude_dB::Union{Sample,Block{1}}
-    panning::Union{Sample,Block{1}}
-    
-    MonoToStereoMix(input::Block{1}, amplitude_dB::Union{Number,Block{1}}=-30.0, 
-    panning::Union{Number,Block{1}}=0.0) = new(input, amplitude_dB isa Number ? Sample(amplitude_dB) : amplitude_dB, 
-    panning isa Number ? Sample(panning) : panning)
+mutable struct MonoToStereoMix{I<:Block{1}, A, P} <: Block{2}
+    input::I
+    amplitude_dB::A
+    panning::P
 end
+MonoToStereoMix(input::Block{1}, amplitude_dB::Number=-30.0, 
+panning::Number=0.0) = MonoToStereoMix{Block{1}, Sample, Sample}(input, Sample(amplitude_dB), Sample(panning))
 
-function process!(m::MonoToStereoMix)::SampleVec2
+function process!(m::MonoToStereoMix{I, A, P})::SampleVec2 where {I<:Block{1}, A,P}
     x::Sample = process!(m.input)
     a::Sample = process!(m.amplitude_dB)
     x *= 10^(a / 20)
@@ -63,12 +61,12 @@ function process!(s::StereoOutput)::SampleVec2
     return output
 end
 
-mutable struct Product <: Block{1}
-    a::Union{Sample,Block{1}}
-    b::Union{Sample,Block{1}}
+mutable struct Product{A, B} <: Block{1}
+    a::A
+    b::B
 end
 
-function process!(p::Product)::SampleOrVec
+function process!(p::Product{A, B})::SampleOrVec where {A, B}
     ai::Sample = process!(p.a)
     bi::Sample = process!(p.b)
     return ai * bi

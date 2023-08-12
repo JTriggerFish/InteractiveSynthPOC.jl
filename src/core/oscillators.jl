@@ -1,11 +1,11 @@
 
-mutable struct Phasor <: Block{1}
-    freq::Union{Sample,Block{1}}
+mutable struct Phasor{T} <: Block{1}
+    freq::T
     phase::Sample
     const sample_freq::Sample
 end
 
-function process!(p::Phasor)::Sample
+function process!(p::Phasor{T})::Sample where {T}
     f::Sample = process!(p.freq)
     c::Sample = 2 * π * f / p.sample_freq
     ret::Sample = p.phase
@@ -14,18 +14,15 @@ function process!(p::Phasor)::Sample
 end
 
 
-mutable struct SineOsc <: Block{1}
-    phase::Phasor
-    amplitude::Union{Sample,Block{1}}
-    SineOsc(freq::Union{Number,Block{1}}, amplitude::Union{Number,Block{1}} = 1.0,
-        sample_freq::Union{Number,Nothing}=nothing) = new(
-        Phasor(freq isa Number ? Sample(freq) : freq, 0.0,
-         sample_freq isa Number ? Sample(sample_freq) : AudioSystem.sample_freq),
-        amplitude isa Number ? Sample(amplitude) : amplitude
-    )
+mutable struct SineOsc{P, A} <: Block{1}
+    phase::P
+    amplitude::A
 end
+SineOsc(freq::Number, amplitude::Number = 1.0, sample_freq::Union{Number, Nothing}=nothing) = SineOsc{Phasor{Sample}, Sample}(
+    Phasor{Sample}(Sample(freq), Sample(0.0), sample_freq isa Number ? Sample(sample_freq) : AudioSystem.sample_freq), 
+    Sample(amplitude))
 
-function process!(o::SineOsc)::Sample
+function process!(o::SineOsc{A})::Sample where {A}
     p::Sample = process!(o.phase)
     a::Sample = process!(o.amplitude)
     a * sin(p)
